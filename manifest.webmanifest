@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "snap",
+  "short_name": "snap",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfbfa",
+  "theme_color": "#fbfbfa",
+  "icons": [
+    { "src": "IMG_0892.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}
