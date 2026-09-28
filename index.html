@@ -1,0 +1,1363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>snap</title>
+<style>
+:root{
+  --bg:#fbfbfa;--ink:#23211d;--mute:rgba(35,33,29,.42);--faint:rgba(35,33,29,.09);
+  --card:#ffffff;--accent:#dd5a3c;--glass:rgba(255,255,255,.85);
+  --shadow:0 1px 2px rgba(40,30,20,.08),0 14px 34px -14px rgba(40,30,20,.32);
+  --ease:cubic-bezier(.2,.8,.2,1);--spring:cubic-bezier(.34,1.45,.5,1);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#151515;--ink:#ece6dc;--mute:rgba(236,230,220,.4);--faint:rgba(236,230,220,.09);
+  --card:#222222;--accent:#f0714f;--glass:rgba(38,38,38,.82);
+  --shadow:0 14px 34px -14px rgba(0,0,0,.8);
+}}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--ink);font:500 14px/1.2 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+svg{display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* stage */
+#stage{position:fixed;inset:0;z-index:1;overflow:hidden;touch-action:none}
+.card{position:absolute;inset:0;pointer-events:none;will-change:transform}
+.frame{position:absolute;border-radius:18px;background:var(--card);box-shadow:var(--shadow)}
+.relayout .frame{transition:left .35s var(--ease),top .35s var(--ease),width .35s var(--ease),height .35s var(--ease)}
+.frame>img{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;transform-origin:0 0;-webkit-user-drag:none}
+.tag,.dots{position:absolute;top:10px;display:flex;align-items:center;height:26px;border-radius:13px;background:rgba(24,22,19,.46);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font-size:12px;transition:opacity .25s,transform .35s var(--spring)}
+.tag{left:10px;gap:6px;padding:0 10px 0 8px;max-width:62%}
+.tag svg{width:13px;height:13px;flex:none;color:var(--c,#fff);stroke-width:2.4}
+.tag span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag span:empty{display:none}
+.dots{right:10px;gap:4px;padding:0 9px;transform-origin:right center}
+.dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.26);transition:background .2s,transform .35s var(--spring)}
+.dots i.on{background:#ff9677}
+.weighing .dots{transform:scale(1.6)}
+.pulse-dots .dots{animation:pop .45s var(--spring)}
+.pulse-tag .tag{animation:pop .45s var(--spring)}
+.card[data-kind=staged] .tag,.card[data-kind=staged] .dots,
+.immersive .tag,.immersive .dots,.zoomed .tag,.zoomed .dots{opacity:0}
+@keyframes pop{40%{transform:scale(1.25)}}
+
+#empty{position:absolute;border:1.5px dashed var(--mute);border-radius:22px;opacity:.5;animation:breath 3.2s ease-in-out infinite}
+@keyframes breath{50%{opacity:.25;transform:scale(.985)}}
+#cam{position:absolute;display:none;object-fit:cover;border-radius:18px;background:#000;opacity:0;transition:opacity .35s}
+[data-view=camera] #cam{display:block}
+.live #cam{opacity:1}
+#flash{position:fixed;inset:0;z-index:9;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
+#flash.on{opacity:.85;transition:none}
+
+/* crop */
+.crop{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+.crop .r{position:absolute;box-shadow:0 0 0 200vmax rgba(15,13,11,.5);outline:1px solid rgba(255,255,255,.7)}
+.crop b{position:absolute;width:24px;height:24px;pointer-events:auto;touch-action:none;border:0 solid #fff}
+.crop b::before{content:"";position:absolute;inset:-16px}
+.crop b[data-h=nw]{left:-3px;top:-3px;border-width:3.5px 0 0 3.5px;border-top-left-radius:6px}
+.crop b[data-h=ne]{right:-3px;top:-3px;border-width:3.5px 3.5px 0 0;border-top-right-radius:6px}
+.crop b[data-h=sw]{left:-3px;bottom:-3px;border-width:0 0 3.5px 3.5px;border-bottom-left-radius:6px}
+.crop b[data-h=se]{right:-3px;bottom:-3px;border-width:0 3.5px 3.5px 0;border-bottom-right-radius:6px}
+
+/* top */
+#top{position:fixed;top:0;right:0;z-index:5;padding:calc(env(safe-area-inset-top) + 10px) 14px 0;transition:opacity .25s,transform .35s var(--ease)}
+.round{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--glass);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:var(--shadow);transition:transform .3s var(--spring)}
+.round:active{transform:scale(.88)}
+.round svg{width:20px;height:20px}
+#prog{position:fixed;top:env(safe-area-inset-top);left:0;right:0;height:2px;z-index:5;transition:opacity .25s}
+#prog i{display:block;height:100%;width:0;background:var(--accent);border-radius:0 2px 2px 0;transition:width .35s var(--ease)}
+
+/* dock */
+#dock{position:fixed;left:0;right:0;bottom:0;z-index:4;padding-bottom:calc(env(safe-area-inset-bottom) + 12px);pointer-events:none;transition:opacity .25s,transform .35s var(--ease)}
+#rail{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding:4px 16px 10px;pointer-events:auto;touch-action:pan-x;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 18px,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,transparent,#000 18px,#000 calc(100% - 18px),transparent)}
+#rail::-webkit-scrollbar{display:none}
+#rail::before,#rail::after{content:"";flex:1 0 0}
+.chip{flex:none;display:flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:17px 15px 17px 16px;color:var(--mute);cursor:pointer;white-space:nowrap;transition:color .2s,background .2s,transform .3s var(--spring),opacity .2s}
+.chip>i{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none;transition:transform .35s var(--spring)}
+.chip>i.all{width:11px;height:11px;background:conic-gradient(#d9774f 0 33%,#3f9a8c 0 66%,#5b7bd6 0)}
+.chip.on{color:var(--ink);background:var(--faint)}
+.chip.on>i{transform:scale(1.4)}
+.chip.add{padding:0 10px}
+.chip.add svg{width:16px;height:16px}
+.chip.hot{transform:scale(1.14);background:var(--accent);color:#fff}
+.chip.edit{color:var(--ink);background:var(--faint)}
+.chip input{border:0;background:none;outline:none;font:inherit;color:inherit;padding:0;min-width:24px;-webkit-user-select:text;user-select:text}
+.chip .x{width:22px;height:22px;margin-right:-6px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff}
+.chip .x svg{width:13px;height:13px;stroke-width:2.2}
+.chip.pulse{animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{50%{transform:scale(1.18);color:var(--accent)}}
+#ctl{display:flex;justify-content:center;align-items:center;gap:36px;height:76px}
+#ctl>*{pointer-events:auto}
+.slot{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;transition:transform .3s var(--spring),opacity .2s,background .2s}
+.slot:active{transform:scale(.86)}
+.slot svg{width:24px;height:24px}
+.slot.hot{background:var(--accent);color:#fff;transform:scale(1.2)}
+.slot.pop{animation:pop .4s var(--spring)}
+#right{width:50px;height:50px;display:grid;place-items:center}
+#queue{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+#shutter{width:74px;height:74px;position:relative;display:grid;place-items:center}
+#shutter::before{content:"";position:absolute;inset:0;border:2px solid var(--ink);border-radius:47% 53% 52% 48%/51% 46% 54% 49%;animation:blob 9s ease-in-out infinite}
+#shutter span{width:58px;height:58px;display:grid;place-items:center;background:var(--ink);color:#fff;border-radius:52% 48% 46% 54%/47% 53% 47% 53%;animation:blob 7s ease-in-out infinite reverse;transition:transform .3s var(--spring),background .3s}
+#shutter:active span{transform:scale(.84)}
+#shutter svg{width:28px;height:28px;stroke-width:2.6;opacity:0;transform:scale(.4);transition:.3s var(--spring)}
+[data-view=camera] #shutter span,[data-view=stage] #shutter span{background:var(--accent)}
+[data-view=stage] #shutter svg{opacity:1;transform:none}
+#shutter.breathe span{animation:blob 7s ease-in-out infinite reverse,grow 2.4s ease-in-out infinite}
+@keyframes grow{50%{transform:scale(.9)}}
+@keyframes blob{0%,100%{border-radius:47% 53% 52% 48%/51% 46% 54% 49%}33%{border-radius:54% 46% 44% 56%/46% 54% 47% 53%}66%{border-radius:49% 51% 56% 44%/54% 47% 53% 46%}}
+.nocam #albumBtn{animation:nudge 1.6s ease-in-out infinite}
+
+.immersive #dock,.immersive #top,.immersive #prog{opacity:0;pointer-events:none}
+.immersive #dock{transform:translateY(40px)}
+.immersive #top{transform:translateY(-30px)}
+.immersive #dock *,.immersive #top *{pointer-events:none}
+[data-view=camera] #top,[data-view=stage] #top,[data-view=camera] #prog,[data-view=stage] #prog{opacity:0;pointer-events:none}
+.lifting #dock,.lifting #top{opacity:1;transform:none}
+.lifting #dock *{pointer-events:auto}
+.lifting .chip:not([data-drop]),.lifting #shutter,.lifting #right,.lifting #top{opacity:.18}
+.grid-open #dock{opacity:0;transform:translateY(30px);pointer-events:none}
+.grid-open #dock *{pointer-events:none}
+.grid-open #prog{opacity:0}
+
+#trash{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 20px);z-index:6;width:64px;height:64px;margin-left:-32px;border-radius:50%;display:grid;place-items:center;background:var(--glass);box-shadow:var(--shadow);transform:scale(0);transition:transform .35s var(--spring),background .2s,color .2s;pointer-events:none}
+#trash svg{width:26px;height:26px}
+.lifting #trash{transform:scale(1);pointer-events:auto}
+#trash.hot{transform:scale(1.25);background:var(--accent);color:#fff}
+
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 16px);z-index:7;width:52px;height:52px;margin-left:-26px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);box-shadow:var(--shadow);transform:translateY(calc(-100% - 24px - env(safe-area-inset-top))) scale(.6);opacity:0;visibility:hidden;pointer-events:none;transition:transform .4s var(--spring),opacity .25s,visibility 0s .4s}
+#toast.show{transform:none;opacity:1;visibility:visible;pointer-events:auto;transition:transform .4s var(--spring),opacity .15s}
+#toast svg{width:22px;height:22px;grid-area:1/1}
+#toast .ring{width:52px;height:52px;stroke-width:2.5;opacity:.5;transform:rotate(-90deg)}
+#toast .ring circle{stroke-dasharray:151;stroke-dashoffset:0}
+#toast.show .ring circle{animation:count 5s linear forwards}
+@keyframes count{to{stroke-dashoffset:151}}
+
+/* grid */
+#grid{position:fixed;inset:0;z-index:3;overflow-y:auto;background:var(--bg);padding:calc(env(safe-area-inset-top) + 64px) 10px calc(env(safe-area-inset-bottom) + 28px);opacity:0;transform:scale(1.05);pointer-events:none;transition:opacity .25s,transform .4s var(--ease);scrollbar-width:none}
+#grid::-webkit-scrollbar{display:none}
+.grid-open #grid{opacity:1;transform:none;pointer-events:auto}
+#cells{position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.cell{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:var(--card);box-shadow:var(--shadow);touch-action:pan-y;cursor:pointer}
+.cell img{width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none}
+.cell.cur{outline:2px solid var(--accent);outline-offset:2px}
+.cell.drag{z-index:2;box-shadow:0 22px 44px -12px rgba(0,0,0,.5);will-change:transform}
+.cell .ty{position:absolute;left:6px;top:6px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:rgba(24,22,19,.5);color:var(--c,#fff)}
+.cell .ty svg{width:11px;height:11px;stroke-width:2.8}
+.cell .w{position:absolute;right:6px;bottom:6px;display:flex;gap:2px;padding:4px 5px;border-radius:8px;background:rgba(24,22,19,.5)}
+.cell .w i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.3)}
+.cell .w i.on{background:#ff9677}
+</style>
+</head>
+<body data-view="feed">
+
+<main id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <div id="empty" hidden></div>
+</main>
+
+<div id="prog" hidden><i></i></div>
+<div id="top"><button id="gridBtn" class="round" aria-label="모아보기"></button></div>
+
+<nav id="dock">
+  <div id="rail"></div>
+  <div id="ctl">
+    <button id="typeBtn" class="slot" data-drop="type" aria-label="유형"></button>
+    <button id="shutter" aria-label="촬영"><span><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span></button>
+    <div id="right">
+      <button id="orderBtn" class="slot" aria-label="순서"></button>
+      <button id="albumBtn" class="slot" aria-label="앨범" hidden></button>
+      <span id="queue" hidden></span>
+    </div>
+  </div>
+</nav>
+
+<section id="grid"><div id="cells"></div></section>
+<div id="trash" data-drop="trash"></div>
+<button id="toast" aria-label="되돌리기"><svg class="ring" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/></svg></button>
+<div id="flash"></div>
+<div id="probe" style="position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)"></div>
+<input type="file" id="file" accept="image/*" multiple hidden>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const buzz = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+const pref = {
+  get(k, d) { try { const v = localStorage.getItem('snap.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('snap.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+
+const ICON = {
+  all: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.7l4.1 7.2H7.9z"/></svg>',
+  concept: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/></svg>',
+  problem: '<svg viewBox="0 0 24 24"><path d="M12 5.2l7.2 12.6H4.8z"/></svg>',
+  random: '<svg viewBox="0 0 24 24"><circle cx="6" cy="8" r="1.9"/><circle cx="16.5" cy="5.5" r="1.9"/><circle cx="10" cy="17.5" r="1.9"/><circle cx="18.5" cy="15" r="1.9"/></svg>',
+  seq: '<svg viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><path d="M8.5 17.5L12 21l3.5-3.5"/></svg>',
+  grid: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="2"/></svg>',
+  close: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>',
+  album: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="13.5" height="13.5" rx="3"/><path d="M8 3.5h8.5a4 4 0 0 1 4 4V16"/><path d="M3.8 17l4-3.6 5 4.6"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M5 7.5h14M10 7.5V5.5h4v2M7 7.5l1 12h8l1-12"/></svg>',
+  undo: '<svg viewBox="0 0 24 24"><path d="M9 6.5L5 10.5l4 4"/><path d="M5 10.5h9.5a4.5 4.5 0 0 1 0 9H12"/></svg>'
+};
+const PALETTE = ['#d9774f', '#8fa04c', '#3f9a8c', '#5b7bd6', '#a86cc1', '#d3a13a', '#c9677f', '#6d8fa3'];
+const colorOf = s => PALETTE[(s.hue != null ? s.hue : Math.max(0, S.subjects.indexOf(s))) % PALETTE.length];
+const freeHue = () => {
+  const used = S.subjects.map(s => s.hue != null ? s.hue : S.subjects.indexOf(s));
+  for (let h = 0; h < PALETTE.length; h++) if (!used.includes(h)) return h;
+  return S.subjects.length % PALETTE.length;
+};
+
+/* ---------- storage ---------- */
+const DB = {
+  db: null,
+  open() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('MemoRE_PhotoReview_DB', 2);
+      r.onupgradeneeded = e => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains('subjects')) db.createObjectStore('subjects', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' }).createIndex('subjectId', 'subjectId');
+        if (e.oldVersion === 1) {
+          // v1: weight 1..3 (default 2) → v2: weight 1..5 (default 3), explicit order
+          r.transaction.objectStore('photos').openCursor().onsuccess = ev => {
+            const c = ev.target.result; if (!c) return;
+            const p = c.value;
+            p.weight = clamp((p.weight || 2) + 1, 1, 5);
+            if (p.order == null) p.order = p.createdAt || 0;
+            c.update(p); c.continue();
+          };
+        }
+      };
+      r.onsuccess = () => { this.db = r.result; res(); };
+      r.onerror = () => rej(r.error);
+    });
+  },
+  all(store) {
+    return new Promise(res => {
+      const q = this.db.transaction(store).objectStore(store).getAll();
+      q.onsuccess = () => res(q.result || []); q.onerror = () => res([]);
+    });
+  },
+  tx(store, fn) {
+    return new Promise((res, rej) => {
+      const t = this.db.transaction(store, 'readwrite');
+      fn(t.objectStore(store));
+      t.oncomplete = () => res(); t.onerror = () => rej(t.error);
+    });
+  },
+  put(store, ...vals) { return this.tx(store, s => vals.forEach(v => s.put(v))); },
+  del(store, ...ids) { return this.tx(store, s => ids.forEach(id => s.delete(id))); }
+};
+
+/* ---------- state ---------- */
+const S = {
+  subjects: [], photos: [],
+  sel: pref.get('sel', null) || (pref.get('subject', 'all') !== 'all' ? [pref.get('subject')] : []), type: pref.get('type', 'all'), mode: pref.get('mode', 'random'),
+  view: 'feed', grid: false, immersive: false,
+  curId: null, hist: [], hpos: -1, pending: null,
+  staged: [], stagedSubject: null, stagedType: 'concept', fromCamera: false, lastSaved: null
+};
+const savePrefs = () => { pref.set('sel', S.sel); pref.set('type', S.type); pref.set('mode', S.mode); };
+const byId = id => S.photos.find(p => p.id === id);
+const subjOf = p => S.subjects.find(s => s.id === p.subjectId);
+const urls = new Map();
+const srcOf = p => {
+  if (!p.blob) return p.imageData;
+  let u = urls.get(p.id);
+  if (!u) { u = URL.createObjectURL(p.blob); urls.set(p.id, u); }
+  return u;
+};
+const pool = () => S.photos
+  .filter(p => (!S.sel.length || S.sel.includes(p.subjectId)) && (S.type === 'all' || p.type === S.type))
+  .sort(byPlace);
+// one sequence per subject (type filters only hide cards, never reorder them);
+// a mix of subjects plays subject after subject in rail order, unfiled cards last
+function rankOf(p) { const i = S.subjects.findIndex(s => s.id === p.subjectId); return i < 0 ? 1e9 : i; }
+function byPlace(a, b) { return rankOf(a) - rankOf(b) || a.order - b.order || a.createdAt - b.createdAt; }
+// frequency: each level doubles the chance (1,2,4,8,16)
+const chance = p => 2 ** ((p.weight || 3) - 1);
+
+function pickRandom() {
+  const list = pool();
+  if (list.length < 2) return list[0] || null;
+  const k = Math.min(5, Math.floor(list.length / 2));
+  const recent = new Set(S.hist.slice(Math.max(0, S.hpos - k + 1), S.hpos + 1));
+  let c = list.filter(p => !recent.has(p.id));
+  if (!c.length) c = list.filter(p => p.id !== S.curId);
+  let t = c.reduce((s, p) => s + chance(p), 0) * Math.random();
+  for (const p of c) { t -= chance(p); if (t < 0) return p; }
+  return c[c.length - 1];
+}
+
+function neighbor(dir) {
+  const list = pool();
+  if (!list.length) return null;
+  if (S.mode === 'seq') {
+    const n = list.length, i = list.findIndex(p => p.id === S.curId);
+    const p = list[i < 0 ? (dir > 0 ? 0 : n - 1) : (i + dir + n) % n];
+    return p.id === S.curId ? null : p;
+  }
+  if (dir < 0) {
+    for (let j = S.hpos - 1; j >= 0; j--) { const p = byId(S.hist[j]); if (p) return p; }
+    return null;
+  }
+  for (let j = S.hpos + 1; j < S.hist.length; j++) { const p = byId(S.hist[j]); if (p) return p; }
+  if (!S.pending || !byId(S.pending.id)) S.pending = pickRandom();
+  return S.pending && S.pending.id !== S.curId ? S.pending : null;
+}
+
+function commit(dir, p) {
+  if (S.mode === 'random') {
+    if (dir < 0) {
+      let j = S.hpos - 1; while (j >= 0 && S.hist[j] !== p.id) j--;
+      S.hpos = Math.max(j, 0);
+    } else {
+      let j = S.hpos + 1; while (j < S.hist.length && !byId(S.hist[j])) j++;
+      if (j < S.hist.length && S.hist[j] === p.id) S.hpos = j;
+      else {
+        S.hist.length = S.hpos + 1; S.hist.push(p.id);
+        if (S.hist.length > 300) S.hist.shift();
+        S.hpos = S.hist.length - 1; S.pending = null;
+      }
+    }
+  }
+  S.curId = p.id;
+}
+
+function reset(keep) {
+  S.pending = null; S.hist = []; S.hpos = -1;
+  const list = pool();
+  const prev = S.curId;
+  let p = keep ? list.find(x => x.id === S.curId) : null;
+  if (!p) p = S.mode === 'seq' ? list[0] : pickRandom();
+  S.curId = p ? p.id : null;
+  if (p) { S.hist = [p.id]; S.hpos = 0; }
+  render();
+  if (p && p.id !== prev) appear(cur);
+  prefetch();
+}
+
+function show(p, anim = true) {
+  S.pending = null;
+  if (p) {
+    S.hist = S.hist.slice(0, S.hpos + 1).filter(id => id !== p.id && byId(id));
+    S.hist.push(p.id); S.hpos = S.hist.length - 1;
+  }
+  S.curId = p ? p.id : null;
+  render();
+  if (p && anim) appear(cur);
+  prefetch();
+}
+
+function prefetch() {
+  if (S.view !== 'feed' || !S.curId) return;
+  const n = neighbor(1);
+  if (n) new Image().src = srcOf(n);
+}
+
+/* ---------- dom ---------- */
+const body = document.body, stageEl = $('#stage'), dock = $('#dock'), rail = $('#rail');
+const typeBtn = $('#typeBtn'), orderBtn = $('#orderBtn'), albumBtn = $('#albumBtn'), queueEl = $('#queue');
+const shutter = $('#shutter'), gridBtn = $('#gridBtn'), gridEl = $('#grid'), cellsEl = $('#cells');
+const toastEl = $('#toast'), trashEl = $('#trash'), emptyEl = $('#empty'), cam = $('#cam'), fileIn = $('#file');
+trashEl.innerHTML = ICON.trash; toastEl.insertAdjacentHTML('beforeend', ICON.undo);
+albumBtn.innerHTML = ICON.album; gridBtn.innerHTML = ICON.grid;
+
+function mkCard() {
+  const c = document.createElement('div');
+  c.className = 'card'; c.hidden = true;
+  c.innerHTML = '<div class="frame"><img alt="" draggable="false"><div class="tag"><svg></svg><span></span></div><div class="dots">' + '<i></i>'.repeat(5) + '</div></div>';
+  c.frame = c.firstChild; c.img = c.frame.firstChild;
+  c.img.onload = () => fit(c);
+  stageEl.appendChild(c);
+  return c;
+}
+let cur = mkCard(), peek = mkCard();
+const cropEl = document.createElement('div');
+cropEl.className = 'crop';
+cropEl.innerHTML = '<div class="r"><b data-h="nw"></b><b data-h="ne"></b><b data-h="sw"></b><b data-h="se"></b></div>';
+
+function safe() {
+  const cs = getComputedStyle($('#probe'));
+  return { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 };
+}
+function box() {
+  const W = innerWidth, H = innerHeight, pad = 12, sf = safe();
+  let top, bot;
+  if (S.immersive) { top = sf.t + pad; bot = sf.b + pad; }
+  else { top = sf.t + 62; bot = dock.offsetHeight + 2; }
+  return { x: pad, y: top, w: W - pad * 2, h: Math.max(80, H - top - bot) };
+}
+function place(el, b) { Object.assign(el.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' }); }
+function fit(c) {
+  const nw = c.img.naturalWidth, nh = c.img.naturalHeight;
+  if (!nw) return;
+  const b = box(), s = Math.min(b.w / nw, b.h / nh), w = nw * s, h = nh * s;
+  place(c.frame, { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h });
+}
+function layout() { fit(cur); fit(peek); const b = box(); place(emptyEl, b); place(cam, b); }
+addEventListener('resize', () => { layout(); });
+
+function setSrc(c, src) {
+  if (c.img.getAttribute('src') !== src) {
+    c.img.src = src;
+    if (c.img.complete && c.img.naturalWidth) fit(c);
+  } else fit(c);
+}
+function paintMeta(c, p) {
+  const s = subjOf(p), tag = c.frame.querySelector('.tag');
+  tag.style.setProperty('--c', s ? colorOf(s) : '#fff');
+  tag.firstChild.outerHTML = ICON[p.type === 'problem' ? 'problem' : 'concept'];
+  tag.lastChild.textContent = s ? s.name : '';
+  c.frame.querySelectorAll('.dots i').forEach((d, i) => d.classList.toggle('on', i < (p.weight || 3)));
+}
+function fill(c, p) {
+  if (!p) { c.hidden = true; c.pid = null; return; }
+  c.hidden = false; c.pid = p.id; c.dataset.kind = 'photo';
+  setSrc(c, srcOf(p)); paintMeta(c, p);
+}
+function pulse(cls) { body.classList.remove(cls); void body.offsetWidth; body.classList.add(cls); setTimeout(() => body.classList.remove(cls), 460); }
+
+function tween(el, tf, ms = 280, ease = 'cubic-bezier(.2,.8,.2,1)', op) {
+  return new Promise(r => {
+    el.style.transition = `transform ${ms}ms ${ease}, opacity ${ms}ms ease`;
+    void el.offsetWidth;
+    el.style.transform = tf;
+    if (op != null) el.style.opacity = op;
+    setTimeout(() => { el.style.transition = ''; r(); }, ms + 20);
+  });
+}
+function appear(el) {
+  el.style.transition = 'none'; el.style.opacity = 0; el.style.transform = 'scale(.95)';
+  void el.offsetWidth;
+  return tween(el, '', 360, 'var(--spring)', 1);
+}
+
+// spring that chases a target every frame: no per-event transition restarts, so drags stay smooth
+function follower(apply, x = 0, y = 0, sc = 1) {
+  const f = { x, y, s: sc, tx: x, ty: y, ts: sc, vx: 0, vy: 0, vs: 0, on: true };
+  const step = () => {
+    if (!f.on) return;
+    f.vx = (f.vx + (f.tx - f.x) * .32) * .6; f.x += f.vx;
+    f.vy = (f.vy + (f.ty - f.y) * .32) * .6; f.y += f.vy;
+    f.vs = (f.vs + (f.ts - f.s) * .22) * .62; f.s += f.vs;
+    apply(f);
+    f.raf = requestAnimationFrame(step);
+  };
+  f.raf = requestAnimationFrame(step);
+  f.stop = () => { f.on = false; cancelAnimationFrame(f.raf); };
+  return f;
+}
+
+/* ---------- zoom ---------- */
+const Z = { s: 1, x: 0, y: 0 };
+function clampZ(s, x, y) {
+  const w = cur.frame.offsetWidth, h = cur.frame.offsetHeight;
+  if (s <= 1) return { s: 1, x: 0, y: 0 };
+  return { s, x: clamp(x, w - w * s, 0), y: clamp(y, h - h * s, 0) };
+}
+function setZ(s, x, y, anim) {
+  Z.s = s; Z.x = x; Z.y = y;
+  const im = cur.img;
+  im.style.transition = anim ? 'transform .32s cubic-bezier(.2,.8,.2,1)' : 'none';
+  im.style.transform = (s === 1 && !x && !y) ? '' : `translate3d(${x}px,${y}px,0) scale(${s})`;
+  body.classList.toggle('zoomed', s > 1.01);
+}
+function resetZ() { setZ(1, 0, 0); peek.img.style.transform = ''; }
+
+/* ---------- render ---------- */
+function render() {
+  body.dataset.view = S.view;
+  if (S.view === 'feed') {
+    const p = byId(S.curId);
+    fill(cur, p);
+    emptyEl.hidden = !!p;
+  } else if (S.view === 'stage') {
+    const it = S.staged[0];
+    cur.hidden = false; cur.pid = null; cur.dataset.kind = 'staged';
+    setSrc(cur, it.url);
+    cur.frame.appendChild(cropEl); paintCrop();
+    emptyEl.hidden = true;
+  } else {
+    cur.hidden = true;
+    emptyEl.hidden = !body.classList.contains('nocam');
+  }
+  if (S.view !== 'stage') cropEl.remove();
+  peek.hidden = true;
+  for (const c of [cur, peek]) { c.style.transform = ''; c.style.opacity = ''; c.style.transformOrigin = ''; }
+  resetZ();
+  renderRail(); renderCtl(); updateProgress(); layout();
+}
+
+function renderCtl() {
+  const v = S.view, t = v === 'feed' ? S.type : S.stagedType;
+  typeBtn.innerHTML = ICON[t];
+  orderBtn.innerHTML = ICON[S.mode === 'seq' ? 'seq' : 'random'];
+  orderBtn.hidden = v !== 'feed';
+  albumBtn.hidden = v !== 'camera';
+  queueEl.hidden = v !== 'stage' || S.staged.length < 2;
+  queueEl.textContent = S.staged.length;
+  shutter.classList.toggle('breathe', v === 'feed' && !S.photos.length);
+}
+
+function updateProgress() {
+  const bar = $('#prog');
+  const on = S.view === 'feed' && S.mode === 'seq' && !!S.curId;
+  bar.hidden = !on;
+  if (!on) return;
+  const l = pool(), i = l.findIndex(p => p.id === S.curId);
+  bar.firstChild.style.width = ((i + 1) / l.length * 100) + '%';
+}
+
+/* ---------- subject rail ---------- */
+const mctx = document.createElement('canvas').getContext('2d');
+function sizeInput(inp) {
+  mctx.font = getComputedStyle(inp).font;
+  inp.style.width = Math.max(24, Math.ceil(mctx.measureText(inp.value || ' ').width) + 4) + 'px';
+}
+
+function renderRail() {
+  const staging = S.view !== 'feed';
+  const isOn = staging ? id => id === S.stagedSubject : id => id === 'all' ? !S.sel.length : S.sel.includes(id);
+  const items = staging ? S.subjects : [{ id: 'all' }, ...S.subjects];
+  const frag = document.createDocumentFragment();
+  items.forEach(s => frag.append(chip(s, isOn(s.id))));
+  const add = document.createElement('div');
+  add.className = 'chip add' + (staging && !S.subjects.length ? ' pulse' : '');
+  add.innerHTML = ICON.plus;
+  add.onclick = () => { if (!add.classList.contains('edit')) beginAdd(add); };
+  frag.append(add);
+  rail.replaceChildren(frag);
+  const on = rail.querySelector('.chip.on');
+  if (on) rail.scrollLeft = on.offsetLeft - rail.clientWidth / 2 + on.offsetWidth / 2;
+}
+
+function chip(s, on) {
+  const b = document.createElement('div');
+  b.className = 'chip' + (on ? ' on' : '');
+  b.dataset.id = s.id;
+  if (s.id === 'all') b.innerHTML = '<i class="all"></i>';
+  else {
+    b.dataset.drop = 'subject';
+    b.style.setProperty('--c', colorOf(s));
+    b.innerHTML = '<i></i><span></span>';
+    b.lastChild.textContent = s.name;
+  }
+  let lp, fired = false, sx = 0;
+  b.onpointerdown = e => {
+    fired = false; sx = e.clientX;
+    if (s.id !== 'all' && !b.classList.contains('edit'))
+      lp = setTimeout(() => { fired = true; buzz(12); editChip(b, s); }, 480);
+  };
+  b.onpointermove = e => { if (Math.abs(e.clientX - sx) > 6) clearTimeout(lp); };
+  b.onpointerup = b.onpointercancel = b.onpointerleave = () => clearTimeout(lp);
+  b.oncontextmenu = e => e.preventDefault();
+  b.onclick = () => { if (!fired && !b.classList.contains('edit')) pickSubject(s.id); };
+  return b;
+}
+
+function pickSubject(id) {
+  if (S.view === 'feed') {
+    // tap toggles a subject in/out of the mix; the multicolor chip clears back to everything
+    if (id === 'all') { if (!S.sel.length) return; S.sel = []; }
+    else {
+      S.sel = S.sel.includes(id) ? S.sel.filter(x => x !== id) : [...S.sel, id];
+      if (S.sel.length === S.subjects.length) S.sel = [];
+    }
+    const x = rail.scrollLeft;
+    savePrefs(); reset(true);
+    rail.scrollLeft = x;
+  } else {
+    S.stagedSubject = S.stagedSubject === id ? null : id;
+    renderRail();
+  }
+}
+
+function inlineInput(b, value, onDone, extra) {
+  b.classList.add('edit');
+  const inp = document.createElement('input');
+  inp.value = value; inp.maxLength = 20; inp.enterKeyHint = 'done';
+  b.replaceChildren(inp);
+  if (extra) b.append(extra);
+  sizeInput(inp);
+  inp.oninput = () => sizeInput(inp);
+  let done = false;
+  const finish = v => { if (done) return; done = true; onDone(v); };
+  inp.onkeydown = e => {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') { inp.value = value; inp.blur(); }
+  };
+  inp.onblur = () => finish(inp.value.trim());
+  inp.focus(); inp.select();
+  return finish;
+}
+
+function editChip(b, s) {
+  const x = document.createElement('span');
+  x.className = 'x'; x.innerHTML = ICON.trash;
+  const finish = inlineInput(b, s.name, async v => {
+    if (v === null) { await deleteSubject(s); return; }
+    if (v && v !== s.name) { s.name = v; await DB.put('subjects', s); }
+    renderRail();
+    if (S.view === 'feed' && byId(S.curId)) paintMeta(cur, byId(S.curId));
+  }, x);
+  x.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); finish(null); };
+}
+
+function beginAdd(b) {
+  inlineInput(b, '', async v => {
+    if (v) {
+      const s = { id: 'subj_' + Date.now(), name: v, hue: freeHue() };
+      await DB.put('subjects', s);
+      S.subjects.push(s);
+      if (S.view !== 'feed') S.stagedSubject = s.id;
+    }
+    renderRail();
+  });
+}
+
+async function deleteSubject(s) {
+  const ps = S.photos.filter(p => p.subjectId === s.id);
+  if (ps.length) await DB.del('photos', ...ps.map(p => p.id));
+  await DB.del('subjects', s.id);
+  S.subjects = S.subjects.filter(x => x !== s);
+  S.photos = S.photos.filter(p => p.subjectId !== s.id);
+  if (S.sel.includes(s.id)) { S.sel = S.sel.filter(x => x !== s.id); savePrefs(); }
+  if (S.stagedSubject === s.id) S.stagedSubject = null;
+  if (S.view === 'feed') reset(true); else renderRail();
+  offerUndo(async () => {
+    await DB.put('subjects', s);
+    if (ps.length) await DB.put('photos', ...ps);
+    S.subjects.push(s); S.subjects.sort((a, b) => a.id < b.id ? -1 : 1);
+    S.photos.push(...ps);
+    if (S.view === 'feed') reset(true); else renderRail();
+  });
+}
+
+/* ---------- undo ---------- */
+let undoTimer = null;
+function offerUndo(fn) {
+  clearTimeout(undoTimer);
+  toastEl.classList.remove('show'); void toastEl.offsetWidth; toastEl.classList.add('show');
+  toastEl.onclick = async () => { clearTimeout(undoTimer); toastEl.classList.remove('show'); toastEl.onclick = null; await fn(); };
+  undoTimer = setTimeout(() => { toastEl.classList.remove('show'); toastEl.onclick = null; }, 5000);
+}
+
+async function removePhoto(p) {
+  const next = neighbor(1);
+  await DB.del('photos', p.id);
+  S.photos = S.photos.filter(x => x !== p);
+  show(next && next !== p ? next : null);
+  if (S.grid) buildGrid();
+  offerUndo(async () => {
+    await DB.put('photos', p);
+    S.photos.push(p);
+    if (S.view === 'feed') show(p);
+    if (S.grid) buildGrid();
+  });
+}
+
+/* ---------- controls ---------- */
+typeBtn.onclick = () => {
+  if (S.view === 'feed') { S.type = { all: 'concept', concept: 'problem', problem: 'all' }[S.type]; savePrefs(); reset(true); }
+  else { S.stagedType = S.stagedType === 'concept' ? 'problem' : 'concept'; renderCtl(); }
+  typeBtn.classList.remove('pop'); void typeBtn.offsetWidth; typeBtn.classList.add('pop');
+};
+orderBtn.onclick = () => {
+  S.mode = S.mode === 'seq' ? 'random' : 'seq'; savePrefs(); reset(true);
+  orderBtn.classList.remove('pop'); void orderBtn.offsetWidth; orderBtn.classList.add('pop');
+};
+shutter.onclick = () => {
+  if (busy) return;
+  if (S.view === 'feed') openCamera();
+  else if (S.view === 'camera') capture();
+  else saveStaged();
+};
+albumBtn.onclick = () => fileIn.click();
+gridBtn.onclick = () => S.grid ? closeGrid() : openGrid();
+fileIn.onchange = () => {
+  const fs = [...fileIn.files].filter(f => f.type.startsWith('image/'));
+  fileIn.value = '';
+  if (fs.length) startImport(fs);
+};
+
+function setImmersive(v) {
+  S.immersive = v;
+  body.classList.toggle('immersive', v);
+  body.classList.add('relayout');
+  layout();
+  setTimeout(() => body.classList.remove('relayout'), 400);
+}
+
+/* ---------- camera & staging ---------- */
+let stream = null;
+function stagedDefaults() {
+  const has = id => S.subjects.some(s => s.id === id);
+  S.stagedSubject = S.sel.length === 1 && has(S.sel[0]) ? S.sel[0] : (has(S.stagedSubject) ? S.stagedSubject : null);
+  S.stagedType = S.type !== 'all' ? S.type : (S.stagedType || 'concept');
+}
+function openCamera() {
+  if (S.grid) closeGrid();
+  stagedDefaults();
+  S.view = 'camera'; S.fromCamera = true;
+  if (S.immersive) setImmersive(false);
+  pushOverlay(); render();
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+    body.classList.add('nocam'); render(); fileIn.click(); return;
+  }
+  startStream();
+}
+async function startStream() {
+  if (stream) { body.classList.add('live'); return; }
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false
+    });
+    if (S.view === 'feed') { s.getTracks().forEach(t => t.stop()); return; }
+    stream = s; cam.srcObject = s;
+    await cam.play().catch(() => {});
+    body.classList.remove('nocam'); body.classList.add('live');
+  } catch (e) {
+    body.classList.add('nocam');
+  }
+  if (S.view === 'camera') render();
+}
+function stopCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; cam.srcObject = null;
+  body.classList.remove('live', 'nocam');
+}
+async function capture() {
+  if (!stream || !cam.videoWidth) { fileIn.click(); return; }
+  const f = $('#flash');
+  f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+  buzz(12);
+  const c = document.createElement('canvas');
+  c.width = cam.videoWidth; c.height = cam.videoHeight;
+  c.getContext('2d').drawImage(cam, 0, 0);
+  const b = await new Promise(r => c.toBlob(r, 'image/jpeg', .92));
+  if (b) addStaged([b]);
+}
+
+function startImport(files) {
+  if (S.grid) closeGrid();
+  if (S.view === 'feed') { stagedDefaults(); S.fromCamera = false; pushOverlay(); }
+  addStaged(files);
+}
+function addStaged(blobs) {
+  for (const b of blobs) S.staged.push({ url: URL.createObjectURL(b), crop: { x: 0, y: 0, w: 1, h: 1 } });
+  const entering = S.view !== 'stage';
+  S.view = 'stage';
+  if (entering) { render(); appear(cur); } else renderCtl();
+}
+function paintCrop() {
+  const c = S.staged[0] && S.staged[0].crop; if (!c) return;
+  Object.assign(cropEl.firstChild.style, { left: c.x * 100 + '%', top: c.y * 100 + '%', width: c.w * 100 + '%', height: c.h * 100 + '%' });
+}
+function loadImg(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+async function bake(it) {
+  const img = await loadImg(it.url), c = it.crop;
+  const sx = c.x * img.naturalWidth, sy = c.y * img.naturalHeight, sw = c.w * img.naturalWidth, sh = c.h * img.naturalHeight;
+  const k = Math.min(1, 1800 / Math.max(sw, sh));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  return new Promise(r => cv.toBlob(r, 'image/jpeg', .86));
+}
+async function saveStaged() {
+  const it = S.staged[0];
+  if (!it || busy) return;
+  busy = true;
+  const fly = tween(cur, `translate3d(0,${-innerHeight * .7}px,0) scale(.55)`, 340, 'cubic-bezier(.5,0,.7,.4)', 0);
+  try {
+    const blob = await bake(it), now = Date.now();
+    const p = { id: 'photo_' + now + '_' + Math.random().toString(36).slice(2, 6), blob, subjectId: S.stagedSubject, type: S.stagedType, weight: 3, createdAt: now, order: now };
+    await DB.put('photos', p);
+    S.photos.push(p); S.lastSaved = p;
+    buzz(10);
+  } catch (e) { console.error(e); }
+  await fly;
+  nextStaged();
+  busy = false;
+}
+async function discardStaged() {
+  if (busy) return;
+  busy = true;
+  await tween(cur, `translate3d(0,${innerHeight}px,0) rotate(8deg)`, 320, 'cubic-bezier(.5,0,.7,.4)', 0);
+  nextStaged();
+  busy = false;
+}
+function nextStaged() {
+  const it = S.staged.shift();
+  if (it) URL.revokeObjectURL(it.url);
+  if (S.staged.length) { render(); appear(cur); }
+  else if (S.fromCamera && stream) { S.view = 'camera'; render(); }
+  else exitToFeed();
+}
+function exitToFeed(fromPop) {
+  stopCamera();
+  S.staged.forEach(it => URL.revokeObjectURL(it.url));
+  S.staged = []; S.view = 'feed'; S.fromCamera = false;
+  cam.style.transform = '';
+  const p = S.lastSaved; S.lastSaved = null;
+  if (p && pool().includes(p)) show(p);
+  else if (!pool().some(x => x.id === S.curId)) reset(false);
+  else render();
+  if (!fromPop) popOverlay();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; body.classList.remove('live'); } }
+  else if (S.view === 'camera' && body.dataset.view === 'camera') startStream();
+});
+addEventListener('paste', e => {
+  const fs = [...((e.clipboardData && e.clipboardData.files) || [])].filter(f => f.type.startsWith('image/'));
+  if (fs.length) startImport(fs);
+});
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault();
+  const fs = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (fs.length) startImport(fs);
+});
+
+/* ---------- overlays & back ---------- */
+let pushed = false, ignorePop = false;
+function pushOverlay() { if (!pushed) { history.pushState({ snap: 1 }, ''); pushed = true; } }
+function popOverlay() {
+  if (pushed && !S.grid && S.view === 'feed') { pushed = false; ignorePop = true; history.back(); }
+}
+addEventListener('popstate', () => {
+  if (ignorePop) { ignorePop = false; return; }
+  pushed = false;
+  back(true);
+  if (S.grid || S.view !== 'feed') pushOverlay();
+});
+function back(fromPop) {
+  if (S.grid) closeGrid(fromPop);
+  else if (S.view !== 'feed') exitToFeed(fromPop);
+  else if (S.immersive) setImmersive(false);
+}
+
+/* ---------- feed gestures ---------- */
+const P = new Map();
+let g = null, busy = false, navDir = 0, navPeek = null;
+let lastTap = 0, tapX = 0, tapY = 0, tapTimer = null;
+
+stageEl.addEventListener('pointerdown', e => {
+  if (busy || S.grid) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  try { stageEl.setPointerCapture(e.pointerId); } catch (_) {}
+  P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (P.size === 2) {
+    if (g && (g.mode === 'pending' || g.mode === 'pan' || g.mode === 'nav')) {
+      clearTimeout(g.lp); clearTimeout(g.pt);
+      if (g.pressed) tween(cur, '', 320, 'var(--spring)');
+      if (g.mode === 'nav') cancelNav();
+      startPinch();
+    }
+    return;
+  }
+  if (P.size > 2) return;
+  const h = e.target.closest && e.target.closest('[data-h]');
+  const now = performance.now();
+  g = { mode: h ? 'crop' : 'pending', sx: e.clientX, sy: e.clientY, trail: [[now, e.clientX, e.clientY]] };
+  if (h) {
+    g.h = h.dataset.h; g.c0 = { ...S.staged[0].crop };
+    g.fw = cur.frame.offsetWidth; g.fh = cur.frame.offsetHeight;
+    return;
+  }
+  g.z0 = { ...Z };
+  if (S.view === 'feed' && S.curId && Z.s <= 1.01) {
+    g.pt = setTimeout(() => { if (g && g.mode === 'pending') { g.pressed = true; tween(cur, 'scale(.97)', 260); } }, 160);
+    g.lp = setTimeout(startLift, 430);
+  }
+});
+
+stageEl.addEventListener('pointermove', e => {
+  if (!P.has(e.pointerId) || !g) return;
+  P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (g.mode === 'pinch') { if (P.size >= 2) movePinch(); return; }
+  if (P.size > 1) return;
+  const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
+  g.trail.push([performance.now(), e.clientX, e.clientY]);
+  if (g.trail.length > 8) g.trail.shift();
+  if (g.mode === 'pending') {
+    if (Math.hypot(dx, dy) < 8) return;
+    clearTimeout(g.lp); clearTimeout(g.pt);
+    if (S.view === 'feed' && Z.s > 1.01) g.mode = 'pan';
+    else if (Math.abs(dy) >= Math.abs(dx)) g.mode = 'nav';
+    else if (S.view === 'feed' && S.curId) startWeight();
+    else g.mode = 'none';
+  }
+  if (g.mode === 'nav') dragNav(dy);
+  else if (g.mode === 'weight') moveWeight(dx);
+  else if (g.mode === 'pan') setZ(Z.s, g.z0.x + dx, g.z0.y + dy);
+  else if (g.mode === 'lift') moveLift(e.clientX, e.clientY, dx, dy);
+  else if (g.mode === 'crop') moveCrop(dx, dy);
+});
+
+function endPointer(e) {
+  if (!P.has(e.pointerId)) return;
+  P.delete(e.pointerId);
+  if (!g) return;
+  if (g.mode === 'pinch') {
+    if (P.size < 2) { endPinch(); g.mode = 'none'; }
+    if (!P.size) g = null;
+    return;
+  }
+  if (P.size) return;
+  clearTimeout(g.lp); clearTimeout(g.pt);
+  const dx = e.clientX - g.sx, dy = e.clientY - g.sy, cancel = e.type === 'pointercancel';
+  switch (g.mode) {
+    case 'pending':
+      if (g.pressed) tween(cur, '', 320, 'var(--spring)');
+      if (!cancel) tap(e.clientX, e.clientY);
+      break;
+    case 'nav': endNav(dy, velocity()); break;
+    case 'weight': endWeight(); break;
+    case 'pan': { const c = clampZ(Z.s, Z.x, Z.y); setZ(c.s, c.x, c.y, true); break; }
+    case 'lift': endLift(); break;
+  }
+  g = null;
+}
+stageEl.addEventListener('pointerup', endPointer);
+stageEl.addEventListener('pointercancel', endPointer);
+stageEl.addEventListener('contextmenu', e => e.preventDefault());
+
+function velocity() {
+  const t = g.trail, last = t[t.length - 1];
+  let first = t[0];
+  for (const s of t) if (last[0] - s[0] <= 100) { first = s; break; }
+  const dt = last[0] - first[0];
+  return dt > 0 ? (last[2] - first[2]) / dt : 0;
+}
+
+function tap(x, y) {
+  if (S.view !== 'feed' || !S.curId) return;
+  const now = performance.now();
+  if (now - lastTap < 300 && Math.hypot(x - tapX, y - tapY) < 30) {
+    clearTimeout(tapTimer); lastTap = 0;
+    if (Z.s > 1.01) { setZ(1, 0, 0, true); return; }
+    const fr = cur.frame.getBoundingClientRect();
+    if (x < fr.left || x > fr.right || y < fr.top || y > fr.bottom) return;
+    const s = 2.5, c = clampZ(s, -(s - 1) * (x - fr.left), -(s - 1) * (y - fr.top));
+    setZ(c.s, c.x, c.y, true);
+    return;
+  }
+  lastTap = now; tapX = x; tapY = y;
+  tapTimer = setTimeout(() => { if (Z.s <= 1.01) setImmersive(!S.immersive); }, 300);
+}
+
+/* vertical: navigate / save / dismiss */
+function dragNav(dy) {
+  const H = innerHeight;
+  if (S.view === 'feed') {
+    if (!S.curId) return;
+    const dir = dy < 0 ? 1 : -1;
+    if (dir !== navDir) {
+      navDir = dir; navPeek = neighbor(dir);
+      if (navPeek) { fill(peek, navPeek); peek.style.transition = 'none'; peek.style.opacity = ''; }
+      else peek.hidden = true;
+    }
+    const d = navPeek ? dy : dy * .22;
+    cur.style.transition = 'none';
+    cur.style.transform = `translate3d(0,${d}px,0) scale(${1 - Math.min(Math.abs(d) / H, 1) * .08})`;
+    if (navPeek) peek.style.transform = `translate3d(0,${d + dir * H}px,0)`;
+  } else if (S.view === 'stage') {
+    cur.style.transition = 'none';
+    cur.style.transform = `translate3d(0,${dy}px,0) rotate(${dy * .012}deg) scale(${1 - Math.min(Math.abs(dy) / H, 1) * .2})`;
+    cur.style.opacity = 1 - Math.min(Math.abs(dy) / H, 1) * .6;
+  } else if (S.view === 'camera') {
+    const d = dy > 0 ? dy : dy * .2;
+    cam.style.transition = 'none';
+    cam.style.transform = `translate3d(0,${d}px,0) scale(${1 - Math.max(0, d) / H * .2})`;
+  }
+}
+function cancelNav() {
+  tween(cur, '', 360, 'var(--spring)', 1);
+  if (navPeek) tween(peek, `translate3d(0,${navDir * innerHeight}px,0)`, 300).then(() => { if (!navPeek) peek.hidden = true; });
+  navDir = 0; navPeek = null;
+}
+async function endNav(dy, v) {
+  const H = innerHeight, want = dy < 0 ? 1 : -1;
+  const fling = Math.abs(dy) > H * .15 || (Math.abs(v) > .45 && Math.sign(-v) === want && Math.abs(dy) > 24);
+  if (S.view === 'feed') {
+    if (fling && navPeek && want === navDir) { const p = navPeek; navPeek = null; await slide(want, p); }
+    else cancelNav();
+  } else if (S.view === 'stage') {
+    if (fling && dy < 0) saveStaged();
+    else if (fling && dy > 0) discardStaged();
+    else tween(cur, '', 380, 'var(--spring)', 1);
+  } else if (S.view === 'camera') {
+    if (fling && dy > 0) { await tween(cam, `translate3d(0,${H}px,0) scale(.8)`, 260); exitToFeed(); }
+    else tween(cam, '', 380, 'var(--spring)');
+  }
+  navDir = 0;
+}
+async function slide(dir, p) {
+  busy = true;
+  const H = innerHeight;
+  await Promise.all([
+    tween(cur, `translate3d(0,${-dir * H}px,0) scale(.92)`, 300),
+    tween(peek, 'translate3d(0,0,0)', 300)
+  ]);
+  commit(dir, p);
+  [cur, peek] = [peek, cur];
+  peek.hidden = true; peek.style.transform = ''; peek.style.opacity = '';
+  resetZ(); updateProgress(); prefetch();
+  busy = false;
+}
+function go(dir) {
+  if (busy || S.view !== 'feed' || !S.curId) return;
+  const p = neighbor(dir);
+  if (!p) { tween(cur, `translate3d(0,${-dir * 18}px,0)`, 120).then(() => tween(cur, '', 300, 'var(--spring)')); return; }
+  fill(peek, p);
+  peek.style.transition = 'none'; peek.style.transform = `translate3d(0,${dir * innerHeight}px,0)`;
+  slide(dir, p);
+}
+
+/* horizontal: frequency */
+function startWeight() {
+  const p = byId(S.curId);
+  g.mode = 'weight'; g.w0 = p.weight || 3; g.wl = g.w0; g.st = 0;
+  body.classList.add('weighing');
+}
+function moveWeight(dx) {
+  const p = byId(S.curId);
+  // first step after a short dead zone, then one step per wide band; stepping back needs a
+  // clear retreat, so a normal pull lands on exactly one step and finger wobble never flips it
+  const a = Math.abs(dx), f = Math.sign(dx) * (a < 34 ? a / 34 : 1 + (a - 34) / 84);
+  let st = Math.trunc(f);
+  if (g.st && Math.sign(f) === Math.sign(g.st) && Math.abs(st) < Math.abs(g.st) && Math.abs(f) > Math.abs(g.st) - .35) st = g.st;
+  g.st = st;
+  const w = clamp(g.w0 + st, 1, 5);
+  if (w !== g.wl) { g.wl = w; p.weight = w; paintMeta(cur, p); buzz(w === 1 || w === 5 ? 16 : 6); }
+  cur.style.transition = 'none';
+  cur.style.transform = `translate3d(${dx * .28}px,0,0) rotate(${dx * .014}deg)`;
+}
+function endWeight() {
+  body.classList.remove('weighing');
+  tween(cur, '', 420, 'var(--spring)');
+  const p = byId(S.curId);
+  if (p && p.weight !== g.w0) { S.pending = null; DB.put('photos', p); }
+}
+function nudgeWeight(d) {
+  const p = byId(S.curId); if (!p) return;
+  const w = clamp((p.weight || 3) + d, 1, 5);
+  if (w === p.weight) return;
+  p.weight = w; S.pending = null;
+  paintMeta(cur, p); pulse('pulse-dots');
+  DB.put('photos', p);
+}
+
+/* long press: lift & drop onto subject / type / trash */
+function startLift() {
+  if (!g || g.mode !== 'pending') return;
+  g.mode = 'lift'; g.hot = null;
+  buzz(15);
+  body.classList.add('lifting');
+  cur.style.transition = 'none';
+  cur.style.transformOrigin = `${g.sx}px ${g.sy}px`;
+  const c = cur;
+  g.f = follower(f => { c.style.transform = `translate3d(${f.x}px,${f.y}px,0) scale(${f.s})`; }, 0, 0, g.pressed ? .97 : 1);
+  g.f.ts = .42;
+}
+function moveLift(x, y, dx, dy) {
+  g.f.tx = dx; g.f.ty = dy;
+  const el = document.elementFromPoint(x, y);
+  const t = el && el.closest('[data-drop]');
+  if (t !== g.hot) {
+    if (g.hot) g.hot.classList.remove('hot');
+    if (t) { t.classList.add('hot'); buzz(6); }
+    g.hot = t;
+  }
+  const rr = rail.getBoundingClientRect();
+  if (y > rr.top && y < rr.bottom) {
+    if (x < 44) rail.scrollLeft -= 8;
+    else if (x > innerWidth - 44) rail.scrollLeft += 8;
+  }
+}
+async function endLift() {
+  const t = g.hot, sx = g.sx, sy = g.sy;
+  g.f.stop();
+  if (t) t.classList.remove('hot');
+  body.classList.remove('lifting');
+  const p = byId(S.curId);
+  if (!t || !p) { await tween(cur, '', 420, 'var(--spring)'); cur.style.transformOrigin = ''; return; }
+  busy = true;
+  const kind = t.dataset.drop;
+  if (kind === 'trash') {
+    const r = t.getBoundingClientRect();
+    await tween(cur, `translate3d(${r.left + r.width / 2 - sx}px,${r.top + r.height / 2 - sy}px,0) scale(0)`, 240);
+    cur.style.transformOrigin = '';
+    busy = false;
+    await removePhoto(p);
+    return;
+  }
+  if (kind === 'subject' && p.subjectId !== t.dataset.id) { p.subjectId = t.dataset.id; p.order = Date.now(); }
+  else if (kind === 'type') p.type = p.type === 'problem' ? 'concept' : 'problem';
+  S.pending = null;
+  await DB.put('photos', p);
+  paintMeta(cur, p);
+  await tween(cur, '', 420, 'var(--spring)');
+  cur.style.transformOrigin = '';
+  pulse('pulse-tag');
+  updateProgress();
+  busy = false;
+}
+
+/* pinch: zoom, or close into grid */
+function startPinch() {
+  if (S.view !== 'feed' || !S.curId) { g = { mode: 'pinch', dead: true }; return; }
+  const [a, b] = [...P.values()], fr = cur.frame.getBoundingClientRect();
+  g = { mode: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, c0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, z0: { ...Z }, fl: fr.left, ft: fr.top };
+}
+function movePinch() {
+  if (g.dead) return;
+  const [a, b] = [...P.values()];
+  const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const s = clamp(g.z0.s * d / g.d0, .5, 6);
+  const qx = (g.c0.x - g.fl - g.z0.x) / g.z0.s, qy = (g.c0.y - g.ft - g.z0.y) / g.z0.s;
+  setZ(s, cx - g.fl - s * qx, cy - g.ft - s * qy);
+}
+function endPinch() {
+  if (g.dead) return;
+  if (Z.s < .8 && g.z0.s <= 1.01) { setZ(1, 0, 0, true); openGrid(); return; }
+  const c = clampZ(Z.s, Z.x, Z.y);
+  setZ(c.s, c.x, c.y, true);
+}
+
+/* crop handles */
+function moveCrop(dx, dy) {
+  const c = { ...g.c0 }, nx = dx / g.fw, ny = dy / g.fh, m = .08, h = g.h;
+  if (h.includes('w')) { const x = clamp(c.x + nx, 0, c.x + c.w - m); c.w += c.x - x; c.x = x; }
+  if (h.includes('e')) c.w = clamp(c.w + nx, m, 1 - c.x);
+  if (h.includes('n')) { const y = clamp(c.y + ny, 0, c.y + c.h - m); c.h += c.y - y; c.y = y; }
+  if (h.includes('s')) c.h = clamp(c.h + ny, m, 1 - c.y);
+  S.staged[0].crop = c;
+  paintCrop();
+}
+
+/* wheel & keys */
+let wheelAcc = 0, wheelLock = 0;
+stageEl.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (S.view !== 'feed' || busy || !S.curId) return;
+  if (e.ctrlKey) {
+    const fr = cur.frame.getBoundingClientRect();
+    const s = clamp(Z.s * Math.exp(-e.deltaY * .01), 1, 6);
+    const qx = (e.clientX - fr.left - Z.x) / Z.s, qy = (e.clientY - fr.top - Z.y) / Z.s;
+    const c = clampZ(s, e.clientX - fr.left - s * qx, e.clientY - fr.top - s * qy);
+    setZ(c.s, c.x, c.y);
+    return;
+  }
+  if (Z.s > 1.01) { const c = clampZ(Z.s, Z.x - e.deltaX, Z.y - e.deltaY); setZ(c.s, c.x, c.y); return; }
+  if (Date.now() < wheelLock) return;
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) > 50) { go(wheelAcc > 0 ? 1 : -1); wheelAcc = 0; wheelLock = Date.now() + 450; }
+}, { passive: false });
+
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input')) return;
+  const k = e.key;
+  if (k === 'Escape') { back(); return; }
+  if (S.grid) return;
+  if (S.view === 'feed') {
+    if (k === 'ArrowDown' || k === ' ' || k === 'j') { e.preventDefault(); go(1); }
+    else if (k === 'ArrowUp' || k === 'k') { e.preventDefault(); go(-1); }
+    else if (k === 'ArrowRight' || k === 'ArrowLeft') { e.preventDefault(); nudgeWeight(k === 'ArrowRight' ? 1 : -1); }
+    else if (k === 'Delete' || k === 'Backspace') { const p = byId(S.curId); if (p && !busy) removePhoto(p); }
+    else if (k === 'g') openGrid();
+    else if (k === 'c') openCamera();
+  } else if (S.view === 'camera') {
+    if (k === ' ' || k === 'Enter') { e.preventDefault(); capture(); }
+  } else if (S.view === 'stage') {
+    if (k === 'Enter') saveStaged();
+    else if (k === 'Delete' || k === 'Backspace') discardStaged();
+  }
+});
+
+/* ---------- grid ---------- */
+function openGrid() {
+  if (S.view !== 'feed' || S.grid) return;
+  S.grid = true;
+  pushOverlay(); buildGrid();
+  body.classList.add('grid-open');
+  gridBtn.innerHTML = ICON.close;
+  const c = cellsEl.querySelector('.cur');
+  if (c) c.scrollIntoView({ block: 'center' });
+}
+function closeGrid(fromPop) {
+  if (!S.grid) return;
+  S.grid = false;
+  body.classList.remove('grid-open');
+  gridBtn.innerHTML = ICON.grid;
+  if (!fromPop) popOverlay();
+}
+function buildGrid() {
+  cellsEl.replaceChildren(...pool().map(p => {
+    const d = document.createElement('div');
+    d.className = 'cell' + (p.id === S.curId ? ' cur' : '');
+    d.dataset.id = p.id;
+    const s = subjOf(p);
+    d.innerHTML = '<img alt="" decoding="async" loading="lazy"><b class="ty">' + ICON[p.type === 'problem' ? 'problem' : 'concept'] + '</b><b class="w">' +
+      [1, 2, 3, 4, 5].map(i => `<i${i <= (p.weight || 3) ? ' class="on"' : ''}></i>`).join('') + '</b>';
+    d.querySelector('.ty').style.setProperty('--c', s ? colorOf(s) : '#fff');
+    d.firstChild.src = srcOf(p);
+    return d;
+  }));
+}
+function jumpTo(id) {
+  const p = byId(id);
+  closeGrid();
+  if (p) show(p);
+}
+
+let gd = null, settling = false;
+cellsEl.addEventListener('pointerdown', e => {
+  const c = e.target.closest('.cell');
+  if (!c || gd || settling) return;
+  gd = { c, id: e.pointerId, sx: e.clientX, sy: e.clientY, drag: false, moved: false };
+  gd.lp = setTimeout(startReorder, 380);
+});
+cellsEl.addEventListener('pointermove', e => {
+  if (!gd || e.pointerId !== gd.id) return;
+  if (!gd.drag) {
+    if (Math.hypot(e.clientX - gd.sx, e.clientY - gd.sy) > 8) { clearTimeout(gd.lp); gd.moved = true; }
+    return;
+  }
+  dragCell(e.clientX, e.clientY);
+});
+cellsEl.addEventListener('pointerup', e => {
+  if (!gd || e.pointerId !== gd.id) return;
+  clearTimeout(gd.lp);
+  if (gd.drag) endReorder(); else if (!gd.moved) jumpTo(gd.c.dataset.id);
+  gd = null;
+});
+cellsEl.addEventListener('pointercancel', e => {
+  if (!gd || e.pointerId !== gd.id) return;
+  clearTimeout(gd.lp);
+  if (gd.drag) endReorder();
+  gd = null;
+});
+cellsEl.addEventListener('contextmenu', e => e.preventDefault());
+gridEl.addEventListener('touchmove', e => { if (gd && gd.drag) e.preventDefault(); }, { passive: false });
+
+// while dragging, layout never changes: every cell keeps its slot and only glides via transform,
+// so hit-testing can't oscillate and nothing reflows. The DOM is reordered once, on drop.
+function startReorder() {
+  if (!gd) return;
+  gd.drag = true; buzz(12);
+  const cells = gd.cells = [...cellsEl.children];
+  gd.from = gd.to = cells.indexOf(gd.c);
+  const sid = (byId(gd.c.dataset.id) || {}).subjectId;
+  const same = cells.map((c, i) => (byId(c.dataset.id) || {}).subjectId === sid ? i : -1).filter(i => i >= 0);
+  gd.lo = same[0]; gd.hi = same[same.length - 1];
+  gd.slots = cells.map(c => ({ x: c.offsetLeft, y: c.offsetTop }));
+  gd.w = gd.c.offsetWidth; gd.h = gd.c.offsetHeight;
+  const r = cellsEl.getBoundingClientRect(), o = gd.slots[gd.from];
+  gd.ox = gd.sx - (r.left + o.x); gd.oy = gd.sy - (r.top + o.y);
+  gd.px = gd.sx; gd.py = gd.sy;
+  try { cellsEl.setPointerCapture(gd.id); } catch (_) {}
+  cells.forEach(c => { c.style.transition = c === gd.c ? 'none' : 'transform .3s cubic-bezier(.2,.8,.2,1)'; });
+  gd.c.classList.add('drag');
+  const d = gd;
+  d.f = follower(f => {
+    if (d.py < 90) gridEl.scrollTop -= 8;
+    else if (d.py > innerHeight - 90) gridEl.scrollTop += 8;
+    const r = cellsEl.getBoundingClientRect(), o = d.slots[d.from];
+    f.tx = d.px - r.left - d.ox - o.x; f.ty = d.py - r.top - d.oy - o.y;
+    d.c.style.transform = `translate3d(${f.x}px,${f.y}px,0) scale(${f.s})`;
+    retarget(d, d.px - r.left - d.ox + d.w / 2, d.py - r.top - d.oy + d.h / 2);
+  });
+  d.f.ts = 1.07;
+}
+function dragCell(x, y) { gd.px = x; gd.py = y; }
+function retarget(d, cx, cy) {
+  let best = d.to, bd = Infinity;
+  d.slots.forEach((s, i) => {
+    if (i < d.lo || i > d.hi) return;
+    const q = Math.hypot(s.x + d.w / 2 - cx, s.y + d.h / 2 - cy);
+    if (q < bd) { bd = q; best = i; }
+  });
+  if (best === d.to) return;
+  d.to = best; buzz(4);
+  const order = d.cells.filter(c => c !== d.c);
+  order.splice(best, 0, d.c);
+  order.forEach((c, i) => {
+    if (c === d.c) return;
+    const a = d.slots[d.cells.indexOf(c)], b = d.slots[i];
+    c.style.transform = a === b ? '' : `translate3d(${b.x - a.x}px,${b.y - a.y}px,0)`;
+  });
+}
+function endReorder() {
+  const d = gd;
+  d.f.stop(); settling = true;
+  const a = d.slots[d.from], b = d.slots[d.to];
+  d.c.style.transition = 'transform .26s cubic-bezier(.2,.8,.2,1)';
+  d.c.style.transform = `translate3d(${b.x - a.x}px,${b.y - a.y}px,0)`;
+  setTimeout(() => {
+    d.cells.forEach(c => { c.style.transition = 'none'; c.style.transform = ''; });
+    d.c.classList.remove('drag');
+    const order = d.cells.filter(c => c !== d.c);
+    order.splice(d.to, 0, d.c);
+    cellsEl.append(...order);
+    void cellsEl.offsetWidth;
+    d.cells.forEach(c => { c.style.transition = ''; });
+    settling = false;
+    if (d.to === d.from) return;
+    // re-place within the subject's full sequence (including cards hidden by the type filter),
+    // right after the visible card it now follows, then renumber that subject
+    const p = byId(d.c.dataset.id); if (!p) return;
+    const prev = order[d.to - 1] && byId(order[d.to - 1].dataset.id);
+    const seq = S.photos.filter(x => x.subjectId === p.subjectId && x !== p).sort(byPlace);
+    const at = prev && prev.subjectId === p.subjectId ? seq.indexOf(prev) + 1 : 0;
+    seq.splice(at, 0, p);
+    const changed = seq.filter((x, i) => x.order !== i && (x.order = i, true));
+    if (changed.length) DB.put('photos', ...changed);
+    updateProgress();
+  }, 270);
+}
+
+/* ---------- boot ---------- */
+(async () => {
+  try { await DB.open(); } catch (e) { console.error(e); return; }
+  S.subjects = (await DB.all('subjects')).sort((a, b) => a.id < b.id ? -1 : 1);
+  S.photos = await DB.all('photos');
+  S.photos.forEach(p => {
+    if (p.order == null) p.order = p.createdAt || 0;
+    if (!p.weight) p.weight = 3;
+    if (p.type !== 'problem') p.type = 'concept';
+  });
+  if (!Array.isArray(S.sel)) S.sel = [];
+  S.sel = S.sel.filter(id => S.subjects.some(s => s.id === id));
+  if (!['all', 'concept', 'problem'].includes(S.type)) S.type = 'all';
+  if (!['random', 'seq'].includes(S.mode)) S.mode = 'random';
+  reset(false);
+  requestAnimationFrame(layout);
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
