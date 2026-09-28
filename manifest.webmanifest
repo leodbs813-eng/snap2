@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "메모RE",
-  "short_name": "메모RE",
+  "name": "snap",
+  "short_name": "snap",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
