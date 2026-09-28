@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "메모RE",
+  "short_name": "메모RE",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfbfa",
+  "theme_color": "#fbfbfa",
+  "icons": [
+    { "src": "IMG_6116.PNG", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}
